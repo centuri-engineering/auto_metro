@@ -1,0 +1,15 @@
+name: ijpy
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - jupyter
+  - notebook
+  - numpy
+  - matplotlib
+  - ipwidgets
+  - jupyterlab
+  - pyimagej
+  - openjdk=8.0
+  - pyjnius=1.2.0
+  - imglyb=0.3.5
