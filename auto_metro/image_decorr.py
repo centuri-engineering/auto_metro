@@ -262,13 +262,13 @@ class ImageDecorr:
 
 
 def _fft(image):
-    """shifted fft
+    """shifted fft 2D
     """
     return fftshift(fft2(fftshift(image)))
 
 
 def _ifft(im_fft):
-    """shifted ifft
+    """shifted ifft 2D
     """
     return ifftshift(ifft2(ifftshift(im_fft)))
 
