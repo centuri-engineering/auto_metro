@@ -10,87 +10,70 @@ https://www.nijboerzernike.nl/_PDF/JModOpt_ENZaberrationretrieval.pdf
 
 """
 import numpy as np
-from .zernike import zernike_nm
+from scipy.optimize import minimize
+
+from .utils import fft_dist, _fft
+from .zernike import zernike_nm, MODES, MODE_NAMES
 
 
-modes = [
-    (0, 0),
-    (2, -2),  # Oblique astigmatism
-    (2, 2),  # Vertical astigmatism
-    (3, -3),  # Vertical trefoil
-    (3, -1),  # Vertical coma
-    (3, 1),  # Horizontal coma
-    (3, 3),  # Oblique trefoil
-    (4, 0),  # Spherical
-]
-
-
-mode_names = [
-    "Fundamental",
-    "Oblique astigmatism",
-    "Vertical astigmatism",
-    "Vertical trefoil",
-    "Vertical coma",
-    "Horizontal coma",
-    "Oblique trefoil",
-    "Spherical",
-]
-
-
-def zernike_tf(nx, ny, pupil, mode_amps):
-
-    rho, phi = np.meshgrid(np.linspace(-1, 1, ny), np.linspace(-1, 1, nx))
+def zernike_tf(rho, phi, pupil, mode_amps, modes=None):
+    if modes is None:
+        modes = MODES
     W = np.zeros_like(rho)
     for (n, m), Anm in zip(modes, mode_amps):
         W += Anm * zernike_nm(rho * pupil, phi, n, m)
-    W *= rho < pupil
+    W *= rho * pupil < 1.0
     return W
 
 
-def fft_dist(nx, ny):
+def power_law(dist, alpha, beta):
 
-    uu2, vv2 = np.meshgrid(
-        np.fft.fftfreq(ny, d=1 / ny) ** 2, np.fft.fftfreq(nx, d=1 / nx) ** 2,
-    )
-    return (uu2 + vv2) ** 0.5
-
-
-def power_law(nx, ny, alpha, beta):
-
-    r = fft_dist(nx, ny) + np.finfo(float).eps
+    r = dist + np.finfo(float).eps
     return (10 ** alpha) * (r ** (np.abs(beta)))
 
 
-def gen_max_likelihood(
-    image_dsp, transfert_function, tf_params, prior_model, prior_params
-):
+def deconvolution(image, modes=None, resolution=1, alpha=10, beta=1, **min_kwargs):
+
+    image_dsp = np.abs(_fft(image)) ** 2
     nx, ny = image_dsp.shape
-    prior = prior_model(nx, ny, *prior_params)
-    mtf = transfert_function(nx, ny, tf_params[0], tf_params[1:])
-    mtf2 = np.abs(mtf) ** 2
-    w = prior / (mtf2 + prior)
-    # w = w[w > 0] why ?
-    numer = (w * image_dsp).sum()
-    denom = np.product(w.ravel()) / w.size
-    return numer / denom
+    xx, yy = np.meshgrid(np.linspace(-1, 1, ny), np.linspace(-1, 1, nx))
+    rho = (xx ** 2 + yy ** 2) ** 0.5
+    phi = np.arctan2(yy, xx)
+    dist = fft_dist(nx, ny)
+    if modes is None:
+        modes = [(2, -2), (2, 2), (4, 0)]
+    pupil = resolution / np.pi
+    p0 = [alpha, beta, pupil] + [1e-3,] * (len(modes))
+    costs = []
 
+    def gen_max_likelihood(tf_params, prior_params):
+        prior = power_law(dist, *prior_params)
+        mtf = zernike_tf(
+            rho,
+            phi,
+            pupil=tf_params[0],
+            mode_amps=[1.0,] + tf_params[1:],
+            modes=[(0, 0),] + modes,
+        )
+        mtf2 = np.abs(mtf) ** 2
+        w = prior / (mtf2 + prior)
+        # w = w[w > 0] why ?
+        numer = (w * image_dsp).sum()
+        denom = np.product(w) ** (1 / w.size)
+        return numer / denom
 
-def opt_gml(params, image_dsp):
+    def opt_gml(params):
+        gml = gen_max_likelihood(params[2:], params[:2])
+        costs.append(gml)
+        return gml
 
-    gml = gen_max_likelihood(image_dsp, zernike_tf, params[2:], power_law, params[:2])
-    return gml
-
-
-# def GML(dataDSP, psfModel, psfParam, priorModel, priorParam):
-#     """Compute the Generalize maximum likelihood given 'dataDSP' the data
-#     powerspectrum, the PSF psfModel(dataDSP.shape, psfParam) and a prior
-#     inverse powerspectrum of the object
-#     `priorModel(dataDSP.shape,priorParam)`"""
-#     q = priorModel(dataDSP.shape, priorParam)
-#     mtf = fft(psfModel(dataDSP.shape, psfParam))
-#     h2 = abs2(mtf)
-#     w = q / (h2 + q)
-#     num = np.sum(w * dataDSP)
-#     w = w[w > 0]
-#     denom = np.exp(np.sum(np.log(w)) / w.size)
-#     return num / denom
+    res = minimize(opt_gml, p0, **min_kwargs)
+    print(res.message)
+    alpha, beta, pupil, *amps = res.x
+    deconv_params = {
+        "α": alpha,
+        "β": beta,
+        "resolution": np.pi * pupil,
+    }
+    deconv_params.update({mode: amp for mode, amp in zip(modes, amps)})
+    return deconv_params, costs

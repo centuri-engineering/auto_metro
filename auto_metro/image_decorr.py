@@ -13,10 +13,11 @@ import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import general_gaussian, find_peaks
-from scipy.fft import fft2, fftshift, ifft2, ifftshift
+
 from scipy.ndimage import gaussian_filter
 from scipy.optimize import minimize_scalar
+
+from .utils import apodise, _fft, _ifft
 
 
 def measure(image, metadata):
@@ -43,35 +44,6 @@ def measure(image, metadata):
     imdecor = ImageDecorr(image, pixel_size)
     imdecor.compute_resolution()
     return {"SNR": imdecor.snr0, "resolution": imdecor.resolution}
-
-
-# apodImRect.m
-def apodise(image, border, order=8):
-    """
-    Parameters
-    ----------
-
-    image: np.ndarray
-    border: int, the size of the boreder in pixels
-
-    Note
-    ----
-    The image is assumed to be of float datatype, no datatype management
-    is performed.
-
-    This is different from the original apodistation method,
-    which multiplied the image borders by a quater of a sine.
-    """
-    # stackoverflow.com/questions/46211487/apodization-mask-for-fast-fourier-transforms-in-python
-    nx, ny = image.shape
-    # Define a general Gaussian in 2D as outer product of the function with itself
-    window = np.outer(
-        general_gaussian(nx, order, nx // 2 - border),
-        general_gaussian(ny, order, ny // 2 - border),
-    )
-    ap_image = window * image
-
-    return ap_image
 
 
 class ImageDecorr:
@@ -259,18 +231,6 @@ class ImageDecorr:
         else:
             self.resolution = np.inf
         return res, max_cor
-
-
-def _fft(image):
-    """shifted fft 2D
-    """
-    return fftshift(fft2(fftshift(image)))
-
-
-def _ifft(im_fft):
-    """shifted ifft 2D
-    """
-    return ifftshift(ifft2(ifftshift(im_fft)))
 
 
 def _masked_fft(im, mask, size):

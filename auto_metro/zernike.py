@@ -7,6 +7,26 @@ from numpy.polynomial import Polynomial
 
 ZERNIKE_POLYS = {}
 
+MODE_NAMES = {
+    (0, 0): "Piston",
+    (1, -1): "Y-Tilt",
+    (1, 1): "X-Tilt",
+    (2, -2): "Oblique astigmatism",
+    (2, 0): "Defocus",
+    (2, 2): "Vertical astigmatism",
+    (3, -3): "Vertical trefoil",
+    (3, -1): "Vertical coma",
+    (3, 1): "Horizontal coma",
+    (3, -3): "Oblique trefoil",
+    (4, 4): "Oblique quadrafoil",
+    (4, -2): "Oblique secondary astigmatism",
+    (4, 0): "Primary Spherical",
+    (4, 2): "Vertical secondary astigmatism",
+    (4, 4): "Vertical quadrafoil",
+}
+
+MODES = list(MODE_NAMES)
+
 
 def zernike_nm(rho, phi, n, m):
     """Returns the value of the Zernike polynomial of
