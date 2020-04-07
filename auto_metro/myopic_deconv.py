@@ -16,25 +16,34 @@ from .utils import fft_dist, _fft
 from .zernike import zernike_nm, MODES, MODE_NAMES
 
 
-def zernike_tf(rho, phi, pupil, mode_amps, modes=None):
+def zernike_tf(rho, phi, resolution, mode_amps, modes=None):
+    pupil = resolution / np.pi
     if modes is None:
         modes = MODES
     W = np.zeros_like(rho)
     for (n, m), Anm in zip(modes, mode_amps):
         W += Anm * zernike_nm(rho * pupil, phi, n, m)
     W *= rho * pupil < 1.0
-    return W
+    return W / W.sum()
 
 
 def power_law(dist, alpha, beta):
 
     r = dist + np.finfo(float).eps
-    return (10 ** alpha) * (r ** (np.abs(beta)))
+    return 10 ** alpha * (r ** (np.abs(beta)))
 
 
-def deconvolution(image, modes=None, resolution=1, alpha=10, beta=1, **min_kwargs):
+def deconvolution(image, modes=None, initial_guess=None, **min_kwargs):
+
+    initial = {"alpha": 1.0, "beta": 2.0, "resolution": 2}
+    for mode in modes:
+        initial[mode] = 1e-6
+
+    if initial_guess is not None:
+        initial.update(initial_guess)
 
     image_dsp = np.abs(_fft(image)) ** 2
+    image_dsp /= image_dsp.max()
     nx, ny = image_dsp.shape
     xx, yy = np.meshgrid(np.linspace(-1, 1, ny), np.linspace(-1, 1, nx))
     rho = (xx ** 2 + yy ** 2) ** 0.5
@@ -42,38 +51,43 @@ def deconvolution(image, modes=None, resolution=1, alpha=10, beta=1, **min_kwarg
     dist = fft_dist(nx, ny)
     if modes is None:
         modes = [(2, -2), (2, 2), (4, 0)]
-    pupil = resolution / np.pi
-    p0 = [alpha, beta, pupil] + [1e-3,] * (len(modes))
     costs = []
 
-    def gen_max_likelihood(tf_params, prior_params):
+    def gen_max_likelihood(prior_params, tf_params):
         prior = power_law(dist, *prior_params)
+
         mtf = zernike_tf(
             rho,
             phi,
-            pupil=tf_params[0],
+            resolution=tf_params[0],
             mode_amps=[1.0,] + tf_params[1:],
             modes=[(0, 0),] + modes,
         )
         mtf2 = np.abs(mtf) ** 2
         w = prior / (mtf2 + prior)
-        # w = w[w > 0] why ?
         numer = (w * image_dsp).sum()
-        denom = np.product(w) ** (1 / w.size)
+        denom = np.exp(np.sum(np.log(w[w > 0])) / w.size)
+        if denom == 0.0:
+            print(prior_params)
+            print(tf_params)
+
         return numer / denom
 
     def opt_gml(params):
-        gml = gen_max_likelihood(params[2:], params[:2])
+        prior_params = params[:2]
+        tf_params = params[2:]
+        gml = gen_max_likelihood(prior_params, tf_params)
         costs.append(gml)
         return gml
 
+    p0 = list(initial.values())
     res = minimize(opt_gml, p0, **min_kwargs)
-    print(res.message)
-    alpha, beta, pupil, *amps = res.x
+
+    alpha, beta, resolution, *amps = res.x
     deconv_params = {
-        "α": alpha,
-        "β": beta,
-        "resolution": np.pi * pupil,
+        "alpha": alpha,
+        "beta": beta,
+        "resolution": resolution,
     }
     deconv_params.update({mode: amp for mode, amp in zip(modes, amps)})
     return deconv_params, costs

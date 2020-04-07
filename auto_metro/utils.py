@@ -47,7 +47,6 @@ def apodise(image, border, order=8):
 
 def fft_dist(nx, ny):
 
-    uu2, vv2 = np.meshgrid(
-        np.fft.fftfreq(ny, d=1 / ny) ** 2, np.fft.fftfreq(nx, d=1 / nx) ** 2,
-    )
-    return (uu2 + vv2) ** 0.5
+    uu2, vv2 = np.meshgrid(np.fft.fftfreq(ny) ** 2, np.fft.fftfreq(nx) ** 2)
+    dist = (uu2 + vv2) ** 0.5
+    return dist  # / dist.sum()
