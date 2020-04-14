@@ -1,3 +1,4 @@
+import numpy as np
 from itertools import product
 
 
@@ -54,14 +55,20 @@ class OmeroImageReader(ImageReader):
         self.conn.connect()
         self.image = conn.getObject("Image", oid=image_id)
         self.pixels = self.image.getPrimaryPixels()
-        super().__init__(self, self.image)
+        super().__init__(self.image)
 
     def __enter__(self):
         return self
 
     def get_metadata(self):
+
         obj_settings = self.image.getObjectiveSettings()
-        obj = obj_settings.getObjective()
+        if not obj_settings:
+            print("No objective found")
+            obj = None
+        else:
+            obj = obj_settings.getObjective()
+
         sizex = self.pixels.getPhysicalSizeX()
         metadata = {
             "SizeZ": self.image.getSizeZ(),
@@ -69,11 +76,21 @@ class OmeroImageReader(ImageReader):
             "SizeT": self.image.getSizeT(),
             "Id": self.image.getId(),
             "AquisitionDate": self.image.getAcquisitionDate().isoformat(),
-            "LensNA": obj.getLensNA(),
             "PhysicalSizeX": sizex.getValue(),
-            "nominalMagnification": obj.getnominalMagnification(),
             "ChannelLabels": self.image.getChannelLabels(),
         }
+        if obj:
+            metadata.update(
+                {
+                    "LensNA": obj.getLensNA(),
+                    "nominalMagnification": obj.getnominalMagnification(),
+                }
+            )
+        else:
+            metadata.update(
+                {"LensNA": np.nan, "nominalMagnification": np.nan,}
+            )
+
         return metadata
 
     def get_plane(self, c, z, t):
