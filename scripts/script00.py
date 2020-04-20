@@ -13,7 +13,6 @@ from auto_metro import batch, imageio, image_decorr
 
 host = "localhost"
 port = 4064
-instrument_id = 10452
 columns = [
     "Id",
     "AquisitionDate",
@@ -61,7 +60,7 @@ def target(lock, im_id, credentials):
         traceback.print_tb(tb)
 
 
-def main():
+def main(instrument_id):
 
     loggin = input("OME loggin:")
     password = getpass("OME password:")
@@ -86,4 +85,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+
+    instrument_id = sys.argv[1]
+    main(instrument_id)
