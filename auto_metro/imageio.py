@@ -48,11 +48,58 @@ class ImageReader:
 
 
 class OmeroImageReader(ImageReader):
+    """Image reader interface for an OMERO data base
+
+    Attributes
+    ----------
+    id : int, the image Id
+    conn : a `BlitzGateway` connection
+    image : the OMERO Image object
+    pixels : the OMERO Pixels object
+
+
+    """
+
     def __init__(self, image_id=None, conn=None):
+        """Creates and OmeroImageReader instance.
+
+        Parameters
+        ----------
+        image_id : int
+            The image identifier in the omero database
+        conn :
+            A BlitzGateway connection instance (will be connected at instanciation)
+
+        Usage
+        -----
+        Please use the context manager to ensure connection is closed
+        on exiting the reader:
+
+        .. code-block:: python
+            with imageio.OmeroImageReader(im_id, conn) as image_reader:
+                do_something
+            # conn is closed outside of the context manager
+
+        Note
+        ----
+
+        This interface implements an iterator over the image stack:
+        .. code-block:: python
+            with imageio.OmeroImageReader(im_id, conn) as image_reader:
+                for (c, z, t), plane in image_reader:
+                    print(f"This is image from channel {c}, z-slice {z} and time point {t}")
+                    # plane is a numpy 2D array
+
+            # conn is closed outside of the context manager
+
+
+
+        """
         print(f"Treating {image_id}")
         self.id = image_id
         self.conn = conn
         self.conn.connect()
+        self.conn.SERVICE_OPTS.setOmeroGroup("-1")
         self.image = conn.getObject("Image", oid=image_id)
         self.pixels = self.image.getPrimaryPixels()
         super().__init__(self.image)
@@ -61,7 +108,27 @@ class OmeroImageReader(ImageReader):
         return self
 
     def get_metadata(self):
+        """Returns a dictionnary with the image metadata
+        with keys:
 
+        * "SizeZ"
+        * "SizeC"
+        * "SizeT"
+        * "Id"
+        * "AquisitionDate"
+        * "PhysicalSizeX"
+        * "ChannelLabels"
+        * "LensNA"
+        * "nominalMagnification"
+
+        The last two keys are set only if `self.image.getObjectiveSettings()`
+        returns an `ObjectiveSettings` instance.
+
+        See Also
+        --------
+        https://docs.openmicroscopy.org/omero-blitz/5.5.5/slice2html/omero/model/Image.html
+
+        """
         obj_settings = self.image.getObjectiveSettings()
         if not obj_settings:
             print("No objective found")

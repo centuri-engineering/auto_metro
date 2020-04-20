@@ -7,7 +7,7 @@ from getpass import getpass
 import omero
 import omero.clients
 from omero.gateway import BlitzGateway
-
+from omero.rtypes import rlong
 from auto_metro import batch, imageio, image_decorr
 
 
@@ -36,7 +36,9 @@ def get_images_from_instrument(instrument_id, conn):
     params.map = {"instrument": rlong(instrument_id)}
     queryService = conn.getQueryService()
     images = queryService.projection(
-        "select i.id from Image i where i.instrument.id=:instrument", params
+        "select i.id from Image i where i.instrument.id=:instrument",
+        params,
+        conn.SERVICE_OPTS,
     )
     return [im[0].val for im in images]
 
@@ -48,7 +50,6 @@ def target(lock, im_id, credentials):
             credentials["loggin"], credentials["password"], host=host, port=port
         )
         # Allow connection to all the images
-        conn.SERVICE_OPTS.setOmeroGroup("-1")
         with imageio.OmeroImageReader(im_id, conn) as image_reader:
             data = batch.measure_process(
                 lock, hf5_record, image_reader, image_decorr.measure, columns
@@ -72,19 +73,16 @@ def main():
     with BlitzGateway(loggin, password, host=host, port=port) as conn:
         conn.SERVICE_OPTS.setOmeroGroup("-1")
         print(instrument_id)
-        all_images = [
-            im.getId() for im in conn.getObjects("Image", opts={"instrument": 10455})
-        ]
-        # random.shuffle(all_images)
-        all_images = all_images  # [:100]
-        print(all_images)
+        all_images = get_images_from_instrument(instrument_id, conn)
+        random.shuffle(all_images)
+        # all_images = all_images  # [:100]
         print(f"There are {len(all_images)} images to analyse")
 
-    # pool = Pool(10)
-    # results = pool.starmap_async(
-    #     target, [(lock, im_id, credentials) for im_id in all_images]
-    # )
-    # results.get()
+    pool = Pool(10)
+    results = pool.starmap_async(
+        target, [(lock, im_id, credentials) for im_id in all_images]
+    )
+    results.get()
 
 
 if __name__ == "__main__":
