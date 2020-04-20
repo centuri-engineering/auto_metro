@@ -1,5 +1,6 @@
 import string
 import logging
+import os
 from datetime import date
 
 from itertools import product
@@ -8,7 +9,9 @@ import pandas as pd
 
 log = logging.getLogger(__file__)
 log.setLevel(logging.DEBUG)
-logfile = f"measures_{date.today().isoformat}.log"
+
+logdir = os.environ.get("MEASURE_LOG_DIRECTORY", ".")
+logfile = f"measures_{date.today().isoformat()}.log"
 hand = logging.FileHandler(logfile)
 hand.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -49,23 +52,22 @@ def measure_single(image_reader, measure, columns, progress_bar=None, **kwargs):
 
 
 def measure_process(lock, hf5_record, image_reader, measure, columns, **kwargs):
-
+    module = measure.__module__.split(".")[-1]
     try:
+        log.info(f"treating image  #{image_reader.id}")
         data = measure_single(
             image_reader, measure, columns, progress_bar=None, **kwargs
         )
     except Exception as e:
         log.info(
             f"Error {type(e)}: {e} in measuring image {image_reader.id}"
-            f" with {measure.__name__} from {measure.__module__}"
+            f" with {measure.__name__} from {module}"
         )
-        return
+        raise e
     try:
         lock.acquire()
         with pd.HDFStore(hf5_record, "a") as file:
-            file.append(
-                key=measure.__module__, value=data, data_columns=["AquisitionDate"]
-            )
+            file.append(key=module, value=data, data_columns=["AquisitionDate"])
     finally:
         lock.release()
     return data
