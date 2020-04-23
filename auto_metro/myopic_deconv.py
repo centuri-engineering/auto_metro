@@ -22,14 +22,16 @@ def zernike_tf(rho, phi, resolution, mode_amps, modes=None):
     W = np.zeros_like(rho)
     for (n, m), Anm in zip(modes, mode_amps):
         W += Anm * zernike_nm(rho * pupil, phi, n, m)
-    W *= rho * pupil < 1.0
+    # apodize
+    W *= np.exp((-((rho * pupil) ** 10)))
     return W / W.sum()
 
 
-def power_law(dist, alpha, beta):
+def power_law(rho, alpha, beta):
     """Power law regularization term
     """
-    r = dist + np.finfo(float).eps
+
+    r = (1 - rho) / 2 + np.finfo(float).eps
     return 10 ** alpha * (r ** (np.abs(beta)))
 
 
@@ -62,6 +64,7 @@ def estimate_psf(
 
     Returns
     -------
+    res : the optimization output
     deconv_params : dictionnary
         the optimized parameter, with the same keys as initial_guess
 
@@ -135,4 +138,4 @@ def estimate_psf(
             "resolution": initial["resolution"],
         }
     deconv_params.update({mode: amp for mode, amp in zip(modes, amps)})
-    return deconv_params
+    return res, deconv_params
