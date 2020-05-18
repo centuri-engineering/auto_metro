@@ -4,12 +4,13 @@ import random
 from multiprocessing import Pool, Lock, Manager
 from datetime import date
 from getpass import getpass
+import pandas as pd
 import omero
 import omero.clients
 from omero.gateway import BlitzGateway
 from omero.rtypes import rlong
 from auto_metro import batch, imageio, image_decorr
-from omero_utils import get_images_from_instrument
+from omero_utils.images import get_images_from_instrument
 
 host = "localhost"
 port = 4064
@@ -43,7 +44,7 @@ def target(lock, im_id, credentials):
         _, _, tb = sys.exc_info()
         print(f"Erro {e} for {im_id}")
         traceback.print_tb(tb)
-
+        return pd.DataFrame(columns=columns)
 
 def main(instrument_id):
 
@@ -57,12 +58,14 @@ def main(instrument_id):
     with BlitzGateway(loggin, password, host=host, port=port) as conn:
         conn.SERVICE_OPTS.setOmeroGroup("-1")
         print(instrument_id)
-        all_images = get_images_from_instrument(instrument_id, conn)
+        #all_images = get_images_from_instrument(instrument_id, conn)
+        all_images = [im.id for im in conn.getObjects("Image")]
+
         random.shuffle(all_images)
-        # all_images = all_images  # [:100]
+        all_images = all_images[:1000]
         print(f"There are {len(all_images)} images to analyse")
 
-    pool = Pool(10)
+    pool = Pool(6)
     results = pool.starmap_async(
         target, [(lock, im_id, credentials) for im_id in all_images]
     )
